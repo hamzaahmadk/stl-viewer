@@ -1,0 +1,5 @@
+# Build output (regenerate with ./build.sh)
+STL Viewer.app/
+
+# macOS
+.DS_Store
