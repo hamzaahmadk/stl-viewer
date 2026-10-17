@@ -52,6 +52,14 @@ The bar at the bottom of each window shows the triangle count, the model's dimen
 - The app is ad-hoc signed. That is fine for a copy you build yourself; a copy downloaded from elsewhere would need right-click → Open the first time.
 - Only tested on Apple silicon running macOS 27; other setups should work but haven't been tried.
 
+## Security
+
+STL Viewer only reads the files you open. Its code has no network access, doesn't run other programs and doesn't write files. Because it parses files from untrusted sources, the loader has been fuzzed with AddressSanitizer, and models with absurd coordinates (over 10¹⁵ units across) are rejected with an error instead of being drawn. The app is not sandboxed; if you want that, add the App Sandbox capability with read-only access to user-selected files.
+
+## License
+
+[MIT](LICENSE)
+
 ## Project layout
 
 | Path | What it is |
