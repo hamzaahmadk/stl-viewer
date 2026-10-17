@@ -106,6 +106,7 @@ final class ViewerWindowController: NSWindowController, NSWindowDelegate {
         }
         let triangles = formatter.string(from: NSNumber(value: mesh.triangleCount)) ?? "?"
         let size = mesh.size
-        return "\(triangles) triangles  ·  \(format(size.x)) × \(format(size.y)) × \(format(size.z))  ·  grid \(format(viewer.gridStep))"
+        let grid = viewer.gridStep > 0 ? "  ·  grid \(format(viewer.gridStep))" : ""
+        return "\(triangles) triangles  ·  \(format(size.x)) × \(format(size.y)) × \(format(size.z))\(grid)"
     }
 }

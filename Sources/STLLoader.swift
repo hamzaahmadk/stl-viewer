@@ -18,9 +18,11 @@ enum STLError: LocalizedError {
     case noTriangles
     case truncated
     case tooLarge
+    case outOfRange
 
     var errorDescription: String? {
         switch self {
+        case .outOfRange: "The model's coordinates are too large to display."
         case .noTriangles: "No triangles found. This doesn't look like a valid STL file."
         case .truncated: "The file ends before all of its triangles do. It may be incomplete or corrupted."
         case .tooLarge: "The model is too large to load into GPU memory."
@@ -29,6 +31,9 @@ enum STLError: LocalizedError {
 }
 
 enum STLLoader {
+    /// Largest bounding-box side we accept, in file units.
+    private static let maxExtent: Float = 1e15
+
     static func load(url: URL) throws -> STLMesh {
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         var raw = isBinary(data) ? try binaryPositions(data) : asciiPositions(data)
@@ -122,7 +127,14 @@ enum STLLoader {
         guard kept > 0 else { throw STLError.noTriangles }
         positions.removeLast(positions.count - kept)
 
-        let center = (lo + hi) / 2
+        // Single precision can't sensibly measure or draw models this big (lengths would overflow
+        // to infinity), so refuse them instead of letting infinities spread through the renderer.
+        let extent = hi - lo
+        guard extent.x <= maxExtent, extent.y <= maxExtent, extent.z <= maxExtent else {
+            throw STLError.outOfRange
+        }
+
+        let center = lo * 0.5 + hi * 0.5 // not (lo + hi) / 2, which can overflow
         positions.withUnsafeMutableBufferPointer { p in
             for i in stride(from: 0, to: kept, by: 3) {
                 p[i] -= center.x

@@ -147,7 +147,7 @@ final class ViewerView: MTKView, MTKViewDelegate {
     private var camera = OrbitCamera()
     private var lastMouse = NSPoint.zero
 
-    private(set) var gridStep: Float = 1
+    private(set) var gridStep: Float = 0 // 0 when there is no grid
     private(set) var showGrid = true
     private(set) var showWireframe = false
 
@@ -186,35 +186,54 @@ final class ViewerView: MTKView, MTKViewDelegate {
         resetView(nil)
     }
 
-    /// A ground grid under the model, aligned to multiples of a "nice" step in file coordinates.
+    /// A ground grid under the model, with lines at multiples of a "nice" step in file coordinates.
+    /// Skipped (`gridStep` stays 0) when the model sits so far from the origin, relative to its
+    /// size, that single precision couldn't tell the lines apart anyway.
     private func buildGrid(for mesh: STLMesh) {
-        let size = mesh.size, c = mesh.center
-        let span = max(size.x, size.y, radius * 0.2)
-        gridStep = Self.niceStep(span / 8)
-        let half = max(gridStep * (span * 0.75 / gridStep).rounded(.up), gridStep * 2)
-        let z = -size.z / 2 - radius * 0.002 // nudged down so it never z-fights the model's base
+        gridBuffer = nil
+        gridVertexCount = 0
+        gridStep = 0
 
-        var lines = [Float]()
-        for k in Int(((c.x - half) / gridStep).rounded(.up))...Int(((c.x + half) / gridStep).rounded(.down)) {
-            let x = Float(k) * gridStep - c.x
-            lines += [x, -half, z, x, half, z]
+        // Double throughout, and checked Int conversions: crafted files can hold coordinates
+        // where Float overflows, and an unchecked Int(Float) would crash the app.
+        let lo = SIMD3<Double>(mesh.boundsMin), hi = SIMD3<Double>(mesh.boundsMax)
+        let size = hi - lo
+        let c = lo * 0.5 + hi * 0.5
+        let span = max(size.x, size.y, Double(radius) * 0.2)
+        let step = Self.niceStep(span / 8)
+        let half = max(step * (span * 0.75 / step).rounded(.up), step * 2)
+
+        func lineIndices(around centre: Double) -> ClosedRange<Int>? {
+            guard let first = Int(exactly: ((centre - half) / step).rounded(.up)),
+                  let last = Int(exactly: ((centre + half) / step).rounded(.down)),
+                  abs(first) < 1_000_000_000_000, abs(last) < 1_000_000_000_000,
+                  first <= last, last - first <= 500 else { return nil }
+            return first...last
         }
-        for k in Int(((c.y - half) / gridStep).rounded(.up))...Int(((c.y + half) / gridStep).rounded(.down)) {
-            let y = Float(k) * gridStep - c.y
-            lines += [-half, y, z, half, y, z]
+        guard let xs = lineIndices(around: c.x), let ys = lineIndices(around: c.y) else { return }
+
+        let z = Float(-size.z / 2 - Double(radius) * 0.002) // nudged down so it never z-fights the model's base
+        let h = Float(half)
+        var lines = [Float]()
+        for k in xs {
+            let x = Float(Double(k) * step - c.x)
+            lines += [x, -h, z, x, h, z]
+        }
+        for k in ys {
+            let y = Float(Double(k) * step - c.y)
+            lines += [-h, y, z, h, y, z]
         }
         gridVertexCount = lines.count / 3
         gridBuffer = lines.withUnsafeBytes {
             metal.device.makeBuffer(bytes: $0.baseAddress!, length: $0.count, options: .storageModeShared)
         }
+        gridStep = Float(step)
     }
 
-    private static func niceStep(_ x: Float) -> Float {
-        let exponent = floor(log10(Double(max(x, 1e-9))))
-        let magnitude = pow(10, exponent)
-        let f = Double(x) / magnitude
-        let nice = f < 1.5 ? 1.0 : f < 3.5 ? 2.0 : f < 7.5 ? 5.0 : 10.0
-        return Float(nice * magnitude)
+    private static func niceStep(_ x: Double) -> Double {
+        let magnitude = pow(10, floor(log10(max(x, 1e-300))))
+        let f = x / magnitude
+        return (f < 1.5 ? 1.0 : f < 3.5 ? 2.0 : f < 7.5 ? 5.0 : 10.0) * magnitude
     }
 
     // MARK: Drawing

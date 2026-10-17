@@ -90,7 +90,7 @@ struct OrbitCamera {
     /// every corner of the box fits the window from the current viewing angle.
     mutating func fit(halfExtents h: SIMD3<Float>, aspect: Float) {
         let tanY = tan(Self.fovY / 2)
-        let tanX = tanY * aspect
+        let tanX = tanY * max(aspect, 0.05) // a collapsed window must not divide by zero
         let (r, u, d) = (right, up, direction)
         var needed: Float = 0
         for sx: Float in [-1, 1] {

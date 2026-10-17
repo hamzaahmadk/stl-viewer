@@ -30,6 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Opening files
 
     private func openViewer(for url: URL) {
+        // Only ever read local files; a non-file URL handed to us must not trigger a network fetch.
+        guard url.isFileURL else { return }
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
 
         if let existing = controllers.first(where: { $0.url == url }) {
